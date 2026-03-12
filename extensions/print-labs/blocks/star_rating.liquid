@@ -7,146 +7,158 @@
   .custom-variant-button { width: 100%; padding: 12px; background: #000; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
 </style>
 
-<div class="custom-variant-block">
-  {% assign product_custom_variants = product.metafields.custom.custom_variants.value %}
+<price-calculator>
+  <div class="custom-variant-block">
+    {% assign product_custom_variants = product.metafields.custom.custom_variants.value %}
 
-  <form id="customVariantForm">
-    <input type="hidden" name="variantId" value="{{ product.selected_or_first_available_variant.id }}">
-    <input type="hidden" id="totalPriceInput" value="0">
+    <form id="customVariantForm">
+      <input type="hidden" name="variantId" value="{{ product.selected_or_first_available_variant.id }}">
+      <input type="hidden" id="totalPriceInput" value="0">
 
-    {% for custom_variant in product_custom_variants %}
+      {% for custom_variant in product_custom_variants %}
+        <div class="custom-variant-wrapper">
+          <label class="custom-variant-label">{{ custom_variant.variantTitle }}</label>
+          <select class="custom-variant-select custom-calc-trigger" name="properties[{{ custom_variant.variantTitle }}]">
+            {% for option in custom_variant.options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endfor %}
+
       <div class="custom-variant-wrapper">
-        <label class="custom-variant-label">{{ custom_variant.variantTitle }}</label>
-        <select class="custom-variant-select custom-calc-trigger" name="properties[{{ custom_variant.variantTitle }}]">
-          {% for option in custom_variant.options %}
-            <option value="{{ option.value }}">{{ option.label }}</option>
-          {% endfor %}
+        <label class="custom-variant-label">Sets</label>
+        <select class="custom-variant-select custom-calc-trigger" id="setsSelect">
+          {% for i in (1..50) %}<option value="{{ i }}">{{ i }}</option>{% endfor %}
         </select>
       </div>
-    {% endfor %}
 
-    <div class="custom-variant-wrapper">
-      <label class="custom-variant-label">Sets</label>
-      <select class="custom-variant-select custom-calc-trigger" id="setsSelect">
-        {% for i in (1..50) %}<option value="{{ i }}">{{ i }}</option>{% endfor %}
-      </select>
-    </div>
+      <div class="custom-variant-wrapper">
+        <label class="file-upload-label" for="imageUpload">
+          📁 <span id="fileNameDisplay">Upload Design</span>
+        </label>
+        <input type="file" id="imageUpload" style="display:none;" accept="image/*">
+      </div>
 
-    <div class="custom-variant-wrapper">
-      <label class="file-upload-label" for="imageUpload">
-        📁 <span id="fileNameDisplay">Upload Design</span>
-      </label>
-      <input type="file" id="imageUpload" style="display:none;" accept="image/*">
-    </div>
-
-    <div id="totalPriceDisplay" style="font-size: 22px; font-weight: bold; margin: 15px 0;">Total: 0.00</div>
-    <button type="submit" class="custom-variant-button" id="submitBtn">Generate Invoice</button>
-  </form>
-</div>
+      <div id="totalPriceDisplay" style="font-size: 22px; font-weight: bold; margin: 15px 0;">Total: 0.00</div>
+      <button type="submit" class="custom-variant-button" id="submitBtn">Generate Invoice</button>
+    </form>
+  </div>
+</price-calculator>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    const form = document.getElementById("customVariantForm");
-    const submitBtn = document.getElementById("submitBtn");
-    const fileInput = document.getElementById("imageUpload");
-    const fileNameDisplay = document.getElementById("fileNameDisplay");
-    const totalPriceDisplay = document.getElementById("totalPriceDisplay");
-    const totalPriceInput = document.getElementById("totalPriceInput");
+class PriceCalculator extends HTMLElement {
+  constructor() {
+    super();
+    this.form = this.querySelector("#customVariantForm");
+    this.submitBtn = this.querySelector("#submitBtn");
+    this.fileInput = this.querySelector("#imageUpload");
+    this.fileNameDisplay = this.querySelector("#fileNameDisplay");
+    this.totalPriceDisplay = this.querySelector("#totalPriceDisplay");
+    this.totalPriceInput = this.querySelector("#totalPriceInput");
+    
+    // Shopify থেকে বেস প্রাইস নেওয়া
+    this.basePrice = parseFloat("{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}") || 0;
+  }
 
-    function calculateTotal() {
-      
-        let basePrice = parseFloat("{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}") || 0;
-        let optionTotal = 0;
+  connectedCallback() {
+    // ইভেন্ট লিসেনার সেটআপ
+    this.querySelectorAll(".custom-calc-trigger").forEach(el => {
+      el.addEventListener("input", () => this.calculateTotal());
+    });
 
-   
-        document.querySelectorAll(".custom-calc-trigger").forEach(select => {
-            if (select.id !== "setsSelect") {
-               
-                const val = parseFloat(select.value);
-                if (!isNaN(val)) {
-                    optionTotal += val;
-                }
-            }
-        });
+    this.fileInput.addEventListener("change", () => this.handleFileChange());
+    this.form.addEventListener("submit", (e) => this.handleSubmit(e));
 
-      
-        const setsElement = document.getElementById("setsSelect");
-        const sets = parseInt(setsElement.value) || 1;
+    // প্রথমবার ক্যালকুলেট করা
+    this.calculateTotal();
+  }
 
-   
-        const finalTotal = (basePrice + optionTotal) * sets;
+  calculateTotal() {
+    let optionTotal = 0;
+    
+    // সব ড্রপডাউন লুপ করে ভ্যালু যোগ করা (Sets বাদে)
+    this.querySelectorAll(".custom-calc-trigger").forEach(select => {
+      if (select.id !== "setsSelect") {
+        const val = parseFloat(select.value);
+        if (!isNaN(val)) {
+          optionTotal += val;
+        }
+      }
+    });
 
-        
-        totalPriceInput.value = finalTotal.toFixed(2);
-        totalPriceDisplay.innerText = "Total: " + finalTotal.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
+    const sets = parseInt(this.querySelector("#setsSelect").value) || 1;
+    
+    // মেইন ক্যালকুলেশন লজিক
+    const finalTotal = (this.basePrice + optionTotal) * sets;
+
+    // UI এবং ইনপুট আপডেট
+    this.totalPriceInput.value = finalTotal.toFixed(2);
+    this.totalPriceDisplay.innerText = "Total: " + finalTotal.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  handleFileChange() {
+    if (this.fileInput.files[0]) {
+      this.fileNameDisplay.innerText = this.fileInput.files[0].name;
+    }
+  }
+
+  async handleSubmit(e) {
+    e.preventDefault();
+    this.submitBtn.innerText = "Processing...";
+    this.submitBtn.disabled = true;
+
+    const payload = {
+      variantId: this.form.variantId.value,
+      totalPrice: this.totalPriceInput.value,
+      fileName: this.fileInput.files[0] ? this.fileInput.files[0].name : "",
+      imageData: null,
+      properties: {}
+    };
+
+    // সব সিলেক্টেড টেক্সট প্রপার্টি হিসেবে নেওয়া
+    this.querySelectorAll(".custom-calc-trigger").forEach(select => {
+      const label = select.id === "setsSelect" ? "Sets" : select.name.replace("properties[", "").replace("]", "").trim();
+      payload.properties[label] = select.options[select.selectedIndex].text;
+    });
+
+    if (this.fileInput.files[0]) {
+      payload.imageData = await new Promise(r => {
+        const reader = new FileReader();
+        reader.onloadend = () => r(reader.result);
+        reader.readAsDataURL(this.fileInput.files[0]);
+      });
     }
 
- 
-    document.querySelectorAll(".custom-calc-trigger").forEach(el => {
-        el.addEventListener("input", calculateTotal);
-    });
+    try {
+      const response = await fetch('/apps/customprice/api/customprice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        throw new Error(result.error || "Server error");
+      }
+    } catch (err) {
+      console.error("Frontend Error:", err);
+      alert("Error: " + err.message);
+      this.submitBtn.disabled = false;
+      this.submitBtn.innerText = "Generate Invoice";
+    }
+  }
+}
 
-    fileInput.addEventListener("change", () => { 
-        if(fileInput.files[0]) fileNameDisplay.innerText = fileInput.files[0].name; 
-    });
-
-    form.addEventListener("submit", async function (e) {
-        e.preventDefault();
-        
-     
-        submitBtn.innerText = "Processing...";
-        submitBtn.disabled = true;
-
-        const payload = {
-            variantId: form.variantId.value,
-            totalPrice: totalPriceInput.value,
-            fileName: fileInput.files[0] ? fileInput.files[0].name : "",
-            imageData: null,
-            properties: {}
-        };
-
-    
-        document.querySelectorAll(".custom-calc-trigger").forEach(select => {
-            const label = select.id === "setsSelect" ? "Sets" : select.name.replace("properties[", "").replace("]", "").trim();
-            payload.properties[label] = select.options[select.selectedIndex].text;
-        });
-
-
-        if (fileInput.files[0]) {
-            payload.imageData = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(fileInput.files[0]);
-            });
-        }
-
-        try {
-            const response = await fetch('/apps/customprice/api/customprice', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            
-            const result = await response.json();
-            
-            if (result.url) {
-                window.location.href = result.url;
-            } else {
-                throw new Error(result.error || "Unknown server error");
-            }
-        } catch (err) {
-            console.error("Frontend Error:", err);
-            alert("Error: " + err.message);
-            submitBtn.disabled = false;
-            submitBtn.innerText = "Generate Invoice";
-        }
-    });
-
-    calculateTotal();
-});
+// কম্পোনেন্ট রেজিস্টার করা
+if (!customElements.get('price-calculator')) {
+  customElements.define('price-calculator', PriceCalculator);
+}
 </script>
 
 {% schema %}
