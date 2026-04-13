@@ -7,18 +7,17 @@
   .custom-variant-button { width: 100%; padding: 12px; background: #000; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
 </style>
 
-<price-calculator>
+<custom-calculator>
   <div class="custom-variant-block">
     {% assign product_custom_variants = product.metafields.custom.custom_variants.value %}
 
     <form id="customVariantForm">
       <input type="hidden" name="variantId" value="{{ product.selected_or_first_available_variant.id }}">
-      <input type="hidden" id="totalPriceInput" value="0">
-
+      
       {% for custom_variant in product_custom_variants %}
         <div class="custom-variant-wrapper">
           <label class="custom-variant-label">{{ custom_variant.variantTitle }}</label>
-          <select class="custom-variant-select custom-calc-trigger" name="properties[{{ custom_variant.variantTitle }}]">
+          <select class="custom-variant-select custom-calc-trigger" name="properties[{{ custom_variant.variantTitle }}]" data-operator="{{ custom_variant.operator | default: 'plus' }}">
             {% for option in custom_variant.options %}
               <option value="{{ option.value }}">{{ option.label }}</option>
             {% endfor %}
@@ -28,7 +27,7 @@
 
       <div class="custom-variant-wrapper">
         <label class="custom-variant-label">Sets</label>
-        <select class="custom-variant-select custom-calc-trigger" id="setsSelect">
+        <select class="custom-variant-select custom-calc-trigger" id="setsSelect" data-operator="into">
           {% for i in (1..50) %}<option value="{{ i }}">{{ i }}</option>{% endfor %}
         </select>
       </div>
@@ -44,121 +43,83 @@
       <button type="submit" class="custom-variant-button" id="submitBtn">Generate Invoice</button>
     </form>
   </div>
-</price-calculator>
+</custom-calculator>
 
 <script>
-class PriceCalculator extends HTMLElement {
-  constructor() {
-    super();
-    this.form = this.querySelector("#customVariantForm");
-    this.submitBtn = this.querySelector("#submitBtn");
-    this.fileInput = this.querySelector("#imageUpload");
-    this.fileNameDisplay = this.querySelector("#fileNameDisplay");
-    this.totalPriceDisplay = this.querySelector("#totalPriceDisplay");
-    this.totalPriceInput = this.querySelector("#totalPriceInput");
-    
-    // Shopify থেকে বেস প্রাইস নেওয়া
-    this.basePrice = parseFloat("{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}") || 0;
-  }
-
-  connectedCallback() {
-    // ইভেন্ট লিসেনার সেটআপ
-    this.querySelectorAll(".custom-calc-trigger").forEach(el => {
-      el.addEventListener("input", () => this.calculateTotal());
-    });
-
-    this.fileInput.addEventListener("change", () => this.handleFileChange());
-    this.form.addEventListener("submit", (e) => this.handleSubmit(e));
-
-    // প্রথমবার ক্যালকুলেট করা
-    this.calculateTotal();
-  }
-
-  calculateTotal() {
-    let optionTotal = 0;
-    
-    // সব ড্রপডাউন লুপ করে ভ্যালু যোগ করা (Sets বাদে)
-    this.querySelectorAll(".custom-calc-trigger").forEach(select => {
-      if (select.id !== "setsSelect") {
-        const val = parseFloat(select.value);
-        if (!isNaN(val)) {
-          optionTotal += val;
-        }
-      }
-    });
-
-    const sets = parseInt(this.querySelector("#setsSelect").value) || 1;
-    
-    // মেইন ক্যালকুলেশন লজিক
-    const finalTotal = (this.basePrice + optionTotal) * sets;
-
-    // UI এবং ইনপুট আপডেট
-    this.totalPriceInput.value = finalTotal.toFixed(2);
-    this.totalPriceDisplay.innerText = "Total: " + finalTotal.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
-
-  handleFileChange() {
-    if (this.fileInput.files[0]) {
-      this.fileNameDisplay.innerText = this.fileInput.files[0].name;
-    }
-  }
-
-  async handleSubmit(e) {
-    e.preventDefault();
-    this.submitBtn.innerText = "Processing...";
-    this.submitBtn.disabled = true;
-
-    const payload = {
-      variantId: this.form.variantId.value,
-      totalPrice: this.totalPriceInput.value,
-      fileName: this.fileInput.files[0] ? this.fileInput.files[0].name : "",
-      imageData: null,
-      properties: {}
-    };
-
-    // সব সিলেক্টেড টেক্সট প্রপার্টি হিসেবে নেওয়া
-    this.querySelectorAll(".custom-calc-trigger").forEach(select => {
-      const label = select.id === "setsSelect" ? "Sets" : select.name.replace("properties[", "").replace("]", "").trim();
-      payload.properties[label] = select.options[select.selectedIndex].text;
-    });
-
-    if (this.fileInput.files[0]) {
-      payload.imageData = await new Promise(r => {
-        const reader = new FileReader();
-        reader.onloadend = () => r(reader.result);
-        reader.readAsDataURL(this.fileInput.files[0]);
+  class CustomCalculator extends HTMLElement {
+    connectedCallback() {
+      this.form = this.querySelector('#customVariantForm');
+      this.triggers = this.querySelectorAll('.custom-calc-trigger');
+      this.display = this.querySelector('#totalPriceDisplay');
+      this.fileInput = this.querySelector('#imageUpload');
+      this.fileNameDisplay = this.querySelector('#fileNameDisplay');
+      this.basePrice = parseFloat("{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}");
+      
+      // Event Listeners
+      this.triggers.forEach(el => el.addEventListener('change', () => this.calculate()));
+      this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+      
+      // ফাইল নাম আপডেটের জন্য লিসেনার
+      this.fileInput.addEventListener('change', () => {
+        if(this.fileInput.files.length > 0) this.fileNameDisplay.textContent = this.fileInput.files[0].name;
       });
+
+      this.calculate();
     }
 
-    try {
+    calculate() {
+      let total = this.basePrice;
+      this.triggers.forEach(el => {
+        if (el.id !== 'setsSelect' && el.dataset.operator === 'plus') total += parseFloat(el.value || 0);
+      });
+      this.triggers.forEach(el => {
+        if (el.dataset.operator === 'into') total *= parseFloat(el.value || 1);
+      });
+      this.display.innerText = "Total: " + total.toFixed(2);
+      this.dataset.total = total.toFixed(2);
+    }
+
+    async handleSubmit(e) {
+      e.preventDefault();
+      const btn = this.querySelector('#submitBtn');
+      btn.disabled = true;
+      btn.innerText = "Processing...";
+
+      const payload = {
+        variantId: this.form.variantId.value,
+        totalPrice: this.dataset.total || this.basePrice.toFixed(2),
+        fileName: this.fileInput.files[0]?.name || "",
+        imageData: this.fileInput.files[0] ? await this.getBase64(this.fileInput.files[0]) : null,
+        properties: {}
+      };
+
+      this.triggers.forEach(el => {
+        if(el.id !== 'setsSelect') {
+          const label = el.name.replace("properties[", "").replace("]", "");
+          payload.properties[label] = el.options[el.selectedIndex].text;
+        }
+      });
+
       const response = await fetch('/apps/customprice/api/customprice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const result = await response.json();
       
-      if (result.url) {
-        window.location.href = result.url;
-      } else {
-        throw new Error(result.error || "Server error");
-      }
-    } catch (err) {
-      console.error("Frontend Error:", err);
-      alert("Error: " + err.message);
-      this.submitBtn.disabled = false;
-      this.submitBtn.innerText = "Generate Invoice";
+      const result = await response.json();
+      if (result.url) window.location.href = result.url;
+      else { alert(result.error); btn.disabled = false; btn.innerText = "Generate Invoice"; }
+    }
+
+    getBase64(file) {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
     }
   }
-}
-
-// কম্পোনেন্ট রেজিস্টার করা
-if (!customElements.get('price-calculator')) {
-  customElements.define('price-calculator', PriceCalculator);
-}
+  customElements.define('custom-calculator', CustomCalculator);
 </script>
 
 {% schema %}
