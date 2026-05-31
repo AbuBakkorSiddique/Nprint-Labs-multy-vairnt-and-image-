@@ -2,7 +2,7 @@
 
 client_id = "5b0a5533f352fe05ee426a0af44f2b70"
 name = "custom-price-calculate"
-application_url = "https://fdb7-2400-c600-5404-7a45-9419-e53e-16ea-e29d.ngrok-free.app"
+application_url = "https://a8da-2400-c600-541a-f404-c124-1de5-55ef-6d67.ngrok-free.app"
 embedded = true
 
 [build]
@@ -24,10 +24,10 @@ api_version = "2026-04"
 scopes = "write_products,read_products,read_metaobjects,write_metaobjects,write_metaobject_definitions,write_orders,write_customers,write_draft_orders,write_files,read_files,read_draft_orders"
 
 [auth]
-redirect_urls = [ "https://fdb7-2400-c600-5404-7a45-9419-e53e-16ea-e29d.ngrok-free.app/api/auth" ]
+redirect_urls = [ "https://a8da-2400-c600-541a-f404-c124-1de5-55ef-6d67.ngrok-free.app/api/auth" ]
 
 
 [app_proxy]
-url = "https://fdb7-2400-c600-5404-7a45-9419-e53e-16ea-e29d.ngrok-free.app" 
+url = "https://a8da-2400-c600-541a-f404-c124-1de5-55ef-6d67.ngrok-free.app" 
 subpath = "customprice"
 prefix = "apps"
