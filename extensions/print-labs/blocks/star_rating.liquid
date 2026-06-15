@@ -75,6 +75,13 @@
       this.triggers.forEach(el => {
         if (el.dataset.operator === 'into') total *= parseFloat(el.value || 1);
       });
+     
+      {%  assign percentage_value = product.metafields.custom.percentage.value %}
+      {%  if  percentage_value != blank  %}
+      total = total * {{  percentage_value}};
+
+      {% endif %}
+
       this.display.innerText = "Total: " + total.toFixed(2);
       this.dataset.total = total.toFixed(2);
     }

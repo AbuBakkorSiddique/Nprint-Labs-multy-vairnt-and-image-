@@ -2,7 +2,7 @@
 
 client_id = "5b0a5533f352fe05ee426a0af44f2b70"
 name = "custom-price-calculate"
-application_url = "https://nprint-labs-multy-vairnt-and-image.onrender.com"
+application_url = "https://a57a-2400-c600-547f-d695-b12a-5004-337d-3a12.ngrok-free.app"
 embedded = true
 
 [build]
@@ -24,10 +24,10 @@ api_version = "2026-04"
 scopes = "write_products,read_products,read_metaobjects,write_metaobjects,write_metaobject_definitions,write_orders,write_customers,write_draft_orders,write_files,read_files,read_draft_orders"
 
 [auth]
-redirect_urls = [ "https://nprint-labs-multy-vairnt-and-image.onrender.com/api/auth" ]
+redirect_urls = [ "https://a57a-2400-c600-547f-d695-b12a-5004-337d-3a12.ngrok-free.app/api/auth" ]
 
 
 [app_proxy]
-url = "https://nprint-labs-multy-vairnt-and-image.onrender.com" 
+url = "https://a57a-2400-c600-547f-d695-b12a-5004-337d-3a12.ngrok-free.app" 
 subpath = "customprice"
 prefix = "apps"
